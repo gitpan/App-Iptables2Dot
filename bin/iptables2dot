@@ -1,0 +1,279 @@
+#!/usr/bin/perl
+# vim: set sw=4 ts=4 tw=78 et si:
+#
+use 5.010;
+use strict;
+use warnings;
+
+use version; our $VERSION = qv('0.0.1');
+
+use Getopt::Long;
+use Pod::Usage;
+
+my %opt = (
+    tables => 'filter',
+    showrules => 1,
+);
+my @optdefs = qw(
+    help|?  manual
+    tables=s
+    edgelabel
+    showrules!
+);
+
+GetOptions(\%opt, @optdefs)
+  or pod2usage(2);
+
+pod2usage(-exitval => 0, -verbose => 1, -input => \*DATA) if ($opt{help});
+pod2usage(-exitval => 0, -verbose => 2, -input => \*DATA) if ($opt{manual});
+
+my @tables;
+my %chains;
+my %jumps;
+my $last_table = '';
+
+while (<>) {
+    read_iptables_line($_);
+}
+
+print dot_graph(split ',', $opt{tables});
+
+#--- only functions
+
+# read_iptables_line($line)
+#
+# Reads the next line from iptables output and creates an entry in the rules
+# and or jump table for it.
+#
+# Returns nothing.
+#
+sub read_iptables_line {
+    my ($line) = @_;
+    return if ($line =~ /^#.*$/);
+    return if ($line =~ /^COMMIT$/);
+    chomp;
+    if ($line =~ /^\*(\S+)$/) {
+        $last_table = $1;
+        push @tables, $1;
+        $chains{$1} = {};
+        $jumps{$1}  = [];
+    }
+    elsif ($line =~ /^:(\S+)\s.+$/) {
+        $chains{$last_table}->{$1} = { rules => [] };
+    }
+    elsif ($line =~ /^-A\s(\S+)\s(.+)$/) {
+        my $chain = $1;
+        my $rule  = $2;
+        if ($rule =~ /^(-[io]\s\S*\s)?.*-j\s(\S+)(\s.*)?/) {
+            my $iface  = $1 || '';
+            my $target = $2;
+
+            # ACCEPT, DROP and REJECT are terminating targets, so we don't want
+            # an edge for them.
+            unless ($target =~ /^(ACCEPT|DROP|REJECT)$/) {
+                my $rn = scalar @{$chains{$last_table}->{$chain}->{rules}};
+                push @{$jumps{$last_table}}, [ $chain, $target, $iface, $rn ];
+            }
+        }
+        push @{$chains{$last_table}->{$chain}->{rules}}, $rule;
+    }
+    else {
+        die "unrecognized line: $line";
+    }
+    return;
+} # read_iptables_line()
+
+# dot_graph(@graphs)
+#
+# Creates a graph in the 'dot' language for all tables given in the list
+# @graphs.
+#
+# Returns the graph as string.
+#
+sub dot_graph {
+    my $subgraphs = '';
+    foreach my $graph (@_) {
+        $subgraphs .= dot_subgraph($graph);
+    }
+    my $ranks = join "; ", internal_nodes(@_); # determine all internal chains
+    my $graph = <<"EOGRAPH";
+digraph iptables {
+  { rank = source; $ranks; }
+  rankdir = LR;
+$subgraphs
+}
+EOGRAPH
+    return $graph;
+} # dot_graph()
+
+# dot_subgraph($table)
+#
+# Creates a subgraph in the 'dot' language for the table given in $table.
+#
+# Returns the subgraph as string.
+#
+sub dot_subgraph {
+    my ($table) = @_;
+    my $nodes  = join "\n    ", dot_nodes($table);
+    my $edges  = join "\n    ", dot_edges($table);
+    my $graph  = <<"EOGRAPH";
+  subgraph $table {
+    $nodes
+    $edges
+  }
+EOGRAPH
+    return $graph;
+} # dot_subgraph()
+
+# dot_edges($table)
+#
+# Lists all jumps between chains in the given table as edge description in the
+# 'dot' language.
+#
+# Returns a list of edge descriptions.
+#
+sub dot_edges {
+    my ($table) = @_;
+    my @edges = ();
+    my $re_it = qr/^(MASQUERADE|RETURN|TCPMSS)$/;
+    foreach my $edge (@{$jumps{$table}}) {
+        my $tp  = ':w';
+        my $lbl = '';
+        if ($opt{edgelabel} && $edge->[2]) {
+            $lbl = " [label=\"$edge->[2]\"]";
+        }
+        unless ($edge->[1] =~ $re_it) {
+            $tp = ":name:w";
+        }
+        if ($opt{showrules}) {
+            push @edges, "$edge->[0]:R$edge->[3]:e -> $edge->[1]$tp$lbl;";
+        }
+        else {
+            push @edges, "$edge->[0]:e -> $edge->[1]$tp$lbl;";
+        }
+    }
+    return @edges;
+} # dot_edges()
+
+# dot_nodes($table)
+#
+# Lists all chains in the given table as node descriptions in the 'dot'
+# language.
+#
+# Returns a list of node descriptions.
+#
+sub dot_nodes {
+    my ($table) = @_;
+    my @nodes = ();
+    foreach my $node (keys %{$chains{$table}}) {
+        my @rules = ();
+        my $rn = 0;
+        if ($opt{showrules}) {
+            foreach my $rule (@{$chains{$table}->{$node}->{rules}}) {
+                push @rules, qq(<tr><td PORT="R$rn">$rule</td></tr>);
+                $rn++;
+            }
+        }
+        my $lbl = "<table border=\"0\" cellborder=\"1\" cellspacing=\"0\">"
+                . qq(<tr><td bgcolor="lightgrey" PORT="name">$node</td></tr>\n)
+                . join("\n", @rules, "</table>");
+        push @nodes, "$node [shape=none,margin=0,label=<$lbl>];";
+    }
+    return @nodes;
+} # dot_nodes()
+
+# internal_nodes(@tables)
+#
+# Lists all chains from all tables in @tables, that are internal chains.
+#
+# Returns a list of all internal tables.
+#
+sub internal_nodes {
+    my $re_in     = qr/^(PREROUTING|POSTROUTING|INPUT|FORWARD|OUTPUT)$/;
+    my @nodes     = ();
+    my %have_node = ();
+    foreach my $table (@_) {
+        foreach my $node (keys %{$chains{$table}}) {
+            if (!$have_node{$node} && $node =~ $re_in) {
+                push @nodes, qq("$node");
+                $have_node{$node} = 1;
+            }
+        }
+    }
+    return @nodes;
+} # internal_nodes()
+
+__END__
+
+=head1 NAME
+
+graph-iptables - turn iptables-save output into graphs for GraphViz
+
+=head1 SYNOPSIS
+
+ iptables2dot [options] [iptables-save-output-file]
+
+=head1 OPTIONS
+
+=over 8
+
+=item B<< -help >>
+
+Print a brief help message and exit.
+
+=item B<< -manual >>
+
+Print the manual page and exit.
+
+=item B<< -edgelabel >>
+
+Provide labels at the edge showing the input or output device for a jump rule.
+
+=item B<< -noshowrules >>
+
+Don't show the rules for the chains.
+Instead show only the possible jumps from chain to chain.
+
+=item B<< -tables tablelist >>
+
+Only print the tables given in I<< tablelist >>.
+The tables in I<< tablelist >> are separated by comma.
+
+Possible tables are C<< nat >>, C<< raw >>, C<< mangle >> and C<< filter >>.
+Defaults to table C<< filter >>.
+
+=back
+
+=head1 DESCRIPTION
+
+This program takes the output from the command C<< iptables-save >> on Linux
+and turns into input suitable for the C<< dot >> program from GraphViz.
+
+It takes the output form C<< iptables-save >> either from standard input
+(STDIN) or from a text file whose name was given on the command line.
+
+It writes the graph description for the C<< dot >> program to standard output
+(STDOUT).
+
+There are two use cases for this program. The first is to get an overview of a
+given iptables configuration and understand the possible jumps between
+different chains in the tables. The second is to make a detailed analysis of
+an iptables configuration using the detailed graphical representation.
+
+The typical workflow for the first use case would be:
+
+ $ sudo iptables-save \
+   | iptables2dot -noshowrules -table filter \
+   > iptables-filter-overview.dot
+ $ dot -Tpdf iptables-filter-overview.dot -o iptables-filter-overview.pdf
+
+For the second use case you would do this:
+
+ $ sudo iptables-save \
+   | iptables2dot -edgelabel -table filter \
+   > iptables-filter.dot
+ $ dot -Tpdf iptables-filter.dot -o iptables-filter.pdf
+
+=head1 AUTHOR
+
+Mathias Weidner <mamawe@cpan.org>

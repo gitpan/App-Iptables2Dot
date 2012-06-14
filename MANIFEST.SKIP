@@ -1,0 +1,11 @@
+^App-Iptables2Dot-*
+.bak$
+^blib/*
+^_build/*
+^Build$
+^iptables-save.txt$
+^_MTN/*
+^.mtn-ignore$
+^MYMETA.yml$
+.swp$
+^todo.otl$

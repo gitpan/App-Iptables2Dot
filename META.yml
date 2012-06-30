@@ -14,10 +14,14 @@ meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
   version: 1.4
 name: App-Iptables2Dot
+provides:
+  App::Iptables2Dot:
+    file: lib/App/Iptables2Dot.pm
+    version: v0.1.0
 requires:
   Carp: 0
   perl: v5.10.1
   version: 0
 resources:
   license: http://dev.perl.org/licenses/
-version: v0.0.1
+version: v0.1.0

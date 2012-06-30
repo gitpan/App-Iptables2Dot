@@ -3,9 +3,12 @@
 ^blib/*
 ^_build/*
 ^Build$
+^ferm/*
 ^iptables-save.txt$
+^Makefile$
 ^_MTN/*
 ^.mtn-ignore$
 ^MYMETA.yml$
+.pdf$
 .swp$
-^todo.otl$
+^TODO.otl$

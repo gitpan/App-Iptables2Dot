@@ -1,4 +1,15 @@
 Revision history for App-Iptables2Dot
 
+0.1.0 Sat Jun 30 20:18:40 CEST 2012
+	- Use module App::Iptables2Dot to do the work (now better
+	  testable).
+	- Method read_iptables_file() handles file opening and closing.
+	- Don't show multiple jumps to a target with option
+	  C<showrules => 0,>. Instead show jump count as label.
+	- Ignore jump targets with option C<omittargets => 1,> suppresses
+	  output of given targets as nodes in the dot graph.
+	- Omit unused chains per default (can be show with option
+	  C<showunusednodes => 1,>
+
 0.0.1 Do 14. Jun 11:42:39 CEST 2012
 	- Initial release

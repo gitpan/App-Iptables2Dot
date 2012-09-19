@@ -7,7 +7,7 @@ use strict;
 use Carp;
 use Getopt::Long qw(GetOptionsFromString);
 
-use version; our $VERSION = qv('0.1.0');
+use version; our $VERSION = qv('0.2.0');
 
 # Other recommended modules (uncomment to use):
 #  use IO::Prompt;
@@ -21,7 +21,7 @@ use version; our $VERSION = qv('0.1.0');
 my @optdefs = qw(
     clamp-mss-to-pmtu
     destination|d=s
-    dport=i
+    dport=s
     in-interface|i=s
     icmp-type=i
     jump|j=s
@@ -32,11 +32,13 @@ my @optdefs = qw(
     o=s
     protocol|p=s
     reject-with
-    s=s
+    source|s=s
+    sport=s
     state=s
     tcp-flags=s
     to-destination=s
     to-source
+    ulog-prefix=s
 );
 
 sub new {
@@ -47,6 +49,11 @@ sub new {
 
     return $self;
 } # new()
+
+sub add_optdef {
+    my $optdef = shift;
+    push @optdefs, $optdef;
+} # add_optdef()
 
 # dot_graph($opt, @graphs)
 #
@@ -286,7 +293,9 @@ This document describes App::Iptables2Dot version 0.1.0
 
     use App::Iptables2Dot;
 
-    my $i2d = new App::Iptables()
+    App::IpTables2Dot::add_optdef('unknown-opt=s');
+
+    my $i2d = new App::Iptables2Dot()
     
     $i2d->read_iptables(\*STDIN);
     $i2d->read_iptables_file($fname);
@@ -371,6 +380,14 @@ Reads the output from iptables-save from the given input stream.
 Reads the saved output from iptables-save from the file with name
 C<$fname>.
 
+=head2 App::Iptables2Dot::add_optdef( $optdef )
+
+This function is not bound to an App::Iptables2Dot object.
+
+You usually want to use this to extend the rule parser with the given option
+definition if you find that the iptables-save output you analyze uses an
+option that the rule parser didn't know.
+
 =for author to fill in:
     Write a separate section listing the public components of the modules
     interface. These normally consist of either subroutines that may be
@@ -403,6 +420,14 @@ I<Getopt::Long>, you may workaround this by adding the unknown option to the
 array C<@optdefs> at the top of F<Apt/Iptables2Dot.pm>. After that please file
 a bug at L<https://rt.cpan.org/> or send me a notice at L<mamawe@cpan.org>
 to have it fixed in one of the next releases of this distribution.
+
+Alternatively you may want to use I<App::Iptables2Dot::add_optdef()> like this
+
+ App::Iptables2Dot::add_optdef('unknown-opt=s');
+
+if the rule parser dies with message
+I<unknown argument in rule: --unknown-opt arg ...> and you don't want to touch
+the library file I<Apt/Iptables2Dot.pm>.
 
 =item C<< unrecognized line: %s >>
 

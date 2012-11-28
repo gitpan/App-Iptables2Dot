@@ -1,5 +1,8 @@
 Revision history for App-Iptables2Dot
 
+0.2.1 Mi 28. Nov 21:39:19 CET 2012
+	- sort internal nodes to get predictable test results
+
 0.2.0 Wed Sep 19 21:13:45 CEST 2012
 	- added function App::Iptables2Dot::add_optdefs() to add options
 	  on the fly

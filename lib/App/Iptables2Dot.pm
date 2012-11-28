@@ -7,7 +7,7 @@ use strict;
 use Carp;
 use Getopt::Long qw(GetOptionsFromString);
 
-use version; our $VERSION = qv('0.2.0');
+use version; our $VERSION = qv('0.2.1');
 
 # Other recommended modules (uncomment to use):
 #  use IO::Prompt;
@@ -219,7 +219,7 @@ sub _internal_nodes {
         unless ($opt->{showunusednodes}) {
             %used = map { $_->[0] => 1, } @{$self->{jumps}->{$table}};
         }
-        foreach my $node (keys %{$self->{chains}->{$table}}) {
+        foreach my $node (sort keys %{$self->{chains}->{$table}}) {
             next unless ($used{$node} || $opt->{showunusednodes});
             if (!$have_node{$node} && $node =~ $re_in) {
                 push @nodes, qq("$node");
